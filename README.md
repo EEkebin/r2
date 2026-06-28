@@ -23,6 +23,7 @@ single **NVIDIA Tesla P100 (16 GB)**.
   - [@mention and DM chat](#mention-and-dm-chat)
 - [Shared reply mechanics](#shared-reply-mechanics)
 - [Architecture](#architecture)
+- [Reference system](#reference-system)
 - [The model](#the-model)
 - [GPU memory: LLM and TTS time-sharing](#gpu-memory-llm-and-tts-time-sharing)
 - [Voice and Discord E2EE (DAVE)](#voice-and-discord-e2ee-dave)
@@ -176,6 +177,53 @@ Node / TypeScript bot (discord.js v14, ESM, run with tsx on Node 24)
 
 No database. Conversation memory is an in-process `Map` (per-channel ring buffer, capped at ~8 turns
 with a 2 h idle TTL). The three services run as containers via `compose.yml`.
+
+---
+
+## Reference system
+
+R2 was built and tested on a single Linux VM (KVM/QEMU guest). This is the exact box it ran on — treat
+it as a known-good baseline, not a hard requirement.
+
+| Component | Spec |
+| --- | --- |
+| **OS** | Ubuntu 26.04 LTS (kernel 7.0, x86-64) |
+| **CPU** | 8 vCPUs (QEMU virtual CPU, Intel; KVM guest) |
+| **RAM** | 16 GB + 4 GB swap |
+| **GPU** | NVIDIA **Tesla P100-PCIE-16GB** — Pascal, compute capability 6.0, 16 GB VRAM |
+| **GPU driver / CUDA** | driver 580.159.03, CUDA 13.0; NVIDIA Container Toolkit (CDI) 1.19.1 |
+| **Boot/OS disk** | 32 GB (`/dev/vda` — 1 GB EFI + ~31 GB ext4 root `/`) |
+| **Data disk** | 128 GB (`/dev/vdb1`, ext4, mounted at `/mnt/vdb1`) |
+| **Container runtime** | Podman 5.7 (rootless) |
+| **Node / Python** | Node 24.18, Python 3.14 (TTS container ships its own torch runtime) |
+
+### Storage layout (and "combining" the two disks)
+
+The VM has **two separate block devices**: a small 32 GB OS/boot disk and a larger 128 GB data disk.
+They are *not* one filesystem out of the box — each is its own ext4 mount (`/` and `/mnt/vdb1`).
+
+You can effectively **combine their capacity** in one of two ways:
+
+- **What we did (relocate the heavy data):** the 32 GB root disk fills up fast because container
+  images, the ~6 GB LLM, and the Hugging Face TTS cache are large. We pointed **Podman's storage**
+  (`graphroot`) at the big disk via `~/.config/containers/storage.conf`:
+
+  ```toml
+  [storage]
+  driver = "overlay"
+  graphroot = "/mnt/vdb1/containers/storage"
+  ```
+
+  The `hf_cache` volume (TTS model weights) likewise lives on `/mnt/vdb1`. The OS stays on the fast
+  small disk; all the bulk lives on the 128 GB disk. Simple, no reformatting.
+
+- **Alternative (true pooling):** put both disks in an **LVM** volume group (or btrfs/ZFS pool) and
+  carve a single logical volume spanning them, so `/` (or `/var`) sees one large filesystem. More
+  flexible, but a bigger setup change — unnecessary for this project, which only needs the bulk data
+  redirected.
+
+> **VRAM is the real constraint, not disk.** The 16 GB P100 can't hold the LLM (~12 GB) and the TTS
+> model (~4 GB) at the same time — see [GPU memory: LLM and TTS time-sharing](#gpu-memory-llm-and-tts-time-sharing).
 
 ---
 
