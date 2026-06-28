@@ -1,0 +1,24 @@
+# SearXNG config for R2 — local single-user instance used as a JSON search API for the bot.
+# Copy this to settings.yml, then set a unique secret_key:
+#   cp searxng/settings.yml.example searxng/settings.yml
+#   openssl rand -hex 32   # paste the output as secret_key below
+use_default_settings: true
+
+server:
+  # REQUIRED: replace with your own random value (openssl rand -hex 32).
+  secret_key: "CHANGE_ME_GENERATE_WITH_openssl_rand_hex_32"
+  # Disable the bot limiter so our own bot can call the JSON API freely (local, single user).
+  limiter: false
+  public_instance: false
+  image_proxy: true
+
+search:
+  # Enable the JSON output format so GET /search?q=...&format=json works.
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""
+
+ui:
+  static_use_hash: true

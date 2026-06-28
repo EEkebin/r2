@@ -1,0 +1,41 @@
+services:
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    devices:
+      - "nvidia.com/gpu=all"
+    security_opt:
+      - "label=disable"
+
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: http://localhost:8080/
+
+  tts:
+    build:
+      context: ./tts
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    devices:
+      - "nvidia.com/gpu=all"
+    security_opt:
+      - "label=disable"
+    environment:
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+
+volumes:
+  ollama:
+  hf_cache:
